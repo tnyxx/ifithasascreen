@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Meow</title>
+  <style>
+    :root{
+      --cells:21;             /* Grid size (square) */
+      --good:#e53935;         /* Normal apple */
+      --bad:#00ff00;          /* Bad apple (pure black) */
+      --grid:#e5e7eb;         /* Light gray grid */
+      --stroke:#d1d5db;       /* Grid stroke color */
+      --hud:#111827;          /* HUD pill bg */
+      --hud-border:#e5e7eb;   /* HUD border */
+    }
+    *{box-sizing:border-box}
+    html,body{
+      height:100%
+    }
+
+    body{
+      margin:0em; 
+      min-height: 100vh;
+      display:flex; 
+      flex-direction:column; 
+      align-items:center;
+      justify-content: center; 
+      gap:12px; 
+      background:#fafafa; 
+      color:#111;
+      font:500 16px/1.4 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu;
+      padding: 24px 16px;
+    }
+
+    .stage-wrap{
+      position:relative; 
+      width:min(92vmin,740px); 
+      aspect-ratio:auto; 
+      border-radius:16px; 
+      overflow:hidden; 
+      border:1px solid #e5e7eb; 
+      background:#fff; 
+      transition: width 0.6s ease;
+    }
+
+    #game{ 
+      display:block; 
+      width:100%; 
+      height:100%; 
+      image-rendering: pixelated; 
+      background:#fff; 
+    }
+
+    .hud{ 
+      position:absolute; 
+      inset:0; 
+      pointer-events:none; 
+      display:flex; 
+      justify-content:space-between; 
+      padding:8px; 
+      align-items:flex-start;
+    }
+
+    .pill{
+      pointer-events:auto; 
+      background:#fff; 
+      border:1px solid var(--hud-border); 
+      color:#111; 
+      padding:5px 9px; 
+      border-radius:999px;  
+      display:inline-flex; 
+      gap:8px; 
+      align-items:center; 
+      box-shadow:0 2px 0 rgba(0,0,0,.02)
+    }
+
+    .right{ 
+      max-width:1px; 
+      max-height:1px; 
+      display:flex; 
+      gap:8px; 
+    }
+
+    #status{ 
+      color:#065f46; 
+      border-color:#a7f3d0; 
+      background:#ecfdf5 
+    }
+
+    .overlay{ 
+      position:absolute; 
+      inset:0; 
+      display:grid; 
+      place-items:center; 
+      background:linear-gradient(180deg,rgba(255,255,255,.7),rgba(255,255,255,.85)); 
+    }
+
+    .card{ 
+      background:#fff; 
+      border:1px solid #e5e7eb; 
+      padding:16px 18px; 
+      border-radius:12px; 
+      text-align:center; 
+    }
+
+    .btn{ 
+      pointer-events:auto; 
+      user-select:none; 
+      cursor:pointer;
+      border:1px solid #d1d5db; 
+      background:#111827; 
+      color:#fff; 
+      padding:10px 14px; 
+      border-radius:10px; 
+      display:inline-flex; 
+      gap:8px; 
+      align-items:center; 
+      font-weight:700; 
+    }
+    
+    .btn:active{ 
+      transform:translateY(1px) 
+    }
+
+    .video-wrap{ 
+      position:absolute; 
+      inset:0; 
+      display:grid; 
+      place-items:center; 
+      background:#000; 
+      opacity:0; 
+      pointer-events:none; 
+      transition:opacity .6s ease; 
+    }
+
+    .video-wrap.show{ 
+      opacity:1; 
+      pointer-events:auto; 
+    }
+
+    video{ 
+      width:100%; 
+      height:100%; 
+      object-fit:cover; 
+      image-rendering: pixelated; 
+      transform: scale(1.6); 
+      transform-origin:center; 
+      filter:contrast(110%);
+    }
+    
+    body.dark::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background: #000;
+      z-index: 9999;
+      animation: fadeout 5s forwards;
+      pointer-events: none;   
+    }
+
+    @keyframes fadeout {
+      from { opacity: 1; }
+      to   { opacity: 0; }
+    }
+
+    body.dark {
+      background: #000 !important;
+      color: #fff !important;
+    }
+
+    body.dark .stage-wrap {
+      background: #000 !important;
+      border-color: #000 !important;
+    }
+
+    body.dark canvas {
+      background: #000 !important;
+    }
+
+    body.dark .hud {
+      display:none;
+    }
+
+  </style>
+</head>
+<body>
+
+  <div class="stage-wrap" id="stage">
+    <canvas id="game" width="504" height="504" aria-label="Snake-Spiel – Tuxedo-Katze"></canvas>
+
+    <div class="hud">
+      <div class="left pill">Score: <span id="score">0</span> · Äpfel: <span id="apples">0</span></div>
+      <div class="right">
+        <span class="pill" id="status">8 sichere Äpfel</span>
+        <button class="pill" id="resetBtn" title="Neustart">Neustart</button>
+      </div>
+    </div>
+
+    <div class="overlay" id="startOverlay">
+      <div class="card">
+        <div style="margin-top:12px"><button class="btn" id="startBtn">eow</button></div>
+      </div>
+    </div>
+
+    <div class="video-wrap" id="videoWrap" aria-hidden="true">
+      <video id="badVideo" preload="auto" playsinline></video>
+    </div>
+  </div>
+
+  <audio id="shatterFx" preload="auto"></audio>
+
+  <script>
+  // ===== Utility =====
+  const rnd = (a,b)=>Math.floor(Math.random()*(b-a+1))+a;
+  const clamp = (n,min,max)=>Math.min(Math.max(n,min),max);
+
+  // ===== Game Setup =====
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const SIZE = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--cells')) || 21; // cells per side
+  let CELL = 24; 
+  const SPEED_BASE = 120; 
+
+  let cat, dir, pendingDir, apple, appleKind, applesEaten, score, tickMs, playing, badTriggered;
+  let blackout = false;
+
+  function reset() {
+    cat = [{x:Math.floor(SIZE/2), y:Math.floor(SIZE/2)}];
+    dir = {x:1,y:0}; pendingDir = null; applesEaten = 0; score = 0; tickMs = SPEED_BASE; playing = false; badTriggered = false;
+    spawnApple(); draw(); updateHud();
+  }
+
+  function updateHud() {
+    document.getElementById('score').textContent = score;
+    document.getElementById('apples').textContent = applesEaten;
+    const leftSafe = clamp(8 - applesEaten, 0, 8);
+    const s = document.getElementById('status');
+    if(leftSafe>0){ s.textContent = leftSafe + ' sichere Äpfel'; s.style.color = '#065f46'; s.style.borderColor = '#a7f3d0'; s.style.background = '#ecfdf5'; }
+    else { s.textContent = '42% Risiko'; s.style.color = '#92400e'; s.style.borderColor = '#fed7aa'; s.style.background = '#fff7ed'; }
+  }
+
+  function cellsEqual(a,b) { 
+    return a.x===b.x && a.y===b.y 
+  }
+
+  function cellInCat(c) { 
+    return cat.some(seg=>cellsEqual(seg,c)) 
+  }
+
+  function spawnApple() {
+    let kind = 'good';
+    if(applesEaten >= 10){ kind = Math.random() < 0.4 ? 'bad' : 'good'; } //APFELS
+    let pos; do{ pos = {x:rnd(0,SIZE-1), y:rnd(0,SIZE-1)}; } while(cellInCat(pos));
+    apple = pos; appleKind = kind;
+  }
+
+  function setDir(nx,ny) { 
+    if(cat.length>1 && (nx===-dir.x && ny===-dir.y)) return; 
+    pendingDir = {x:nx,y:ny}; 
+  }
+
+  document.addEventListener('keydown', e=>{
+    if(e.key==='ArrowLeft' || e.key.toLowerCase()==='a') setDir(-1,0);
+    if(e.key==='ArrowRight'|| e.key.toLowerCase()==='d') setDir(1,0);
+    if(e.key==='ArrowUp'   || e.key.toLowerCase()==='w') setDir(0,-1);
+    if(e.key==='ArrowDown' || e.key.toLowerCase()==='s') setDir(0,1);
+    if(e.key.toLowerCase()==='r') { hideVideo(); hideOverlay(); reset(); playing=true; loop(); }
+  }) 
+
+  document.getElementById('startBtn').onclick = ()=>{ hideOverlay(); playing=true; loop(); };
+  document.getElementById('resetBtn').onclick = ()=>{ hideVideo(); hideOverlay(); reset(); playing=true; loop(); };
+
+  function hideOverlay(){ 
+    document.getElementById('startOverlay').style.display='none'; 
+  }
+
+  // ===== Rendering =====
+  function drawBoard(){
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle = '#eceff1';
+    for(let i=1;i<SIZE;i++){
+      const x = Math.round(i*CELL)+.5;
+      ctx.fillRect(x,0,1,canvas.height);
+      const y = Math.round(i*CELL)+.5;
+      ctx.fillRect(0,y,canvas.width,1);
+    }
+    ctx.strokeStyle = '#d1d5db'; ctx.lineWidth = 1; ctx.strokeRect(.5,.5, canvas.width-1, canvas.height-1);
+  }
+
+  function drawApple(){
+    const {x,y} = apple; const px = x*CELL, py = y*CELL; const cx = px+CELL/2, cy=py+CELL/2;
+    ctx.save();
+    if(appleKind==='good'){
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--good').trim() || '#e53935';
+      ctx.beginPath(); ctx.ellipse(cx,cy, CELL*0.32, CELL*0.28, 0, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#43a047'; ctx.beginPath(); ctx.ellipse(cx+CELL*0.12, cy-CELL*0.28, CELL*0.12, CELL*0.07, Math.PI/6, 0, Math.PI*2); ctx.fill();
+    }else{
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--bad').trim() || '#00ff00';
+      ctx.beginPath(); ctx.ellipse(cx,cy, CELL*0.32, CELL*0.28, 0, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#000000'; ctx.beginPath(); ctx.ellipse(cx+CELL*0.12, cy-CELL*0.28, CELL*0.12, CELL*0.07, Math.PI/6, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawCat(){
+    for(let i=0;i<cat.length;i++){
+      const seg = cat[i]; const px=seg.x*CELL, py=seg.y*CELL; const isHead = i===cat.length-1;
+      if(isHead){ drawCatHead(px,py,dir); } else { drawCatBody(px,py,i); }
+    }
+  }
+
+  function drawCatBody(px,py,index){
+    ctx.fillStyle = '#0b0b0b'; ctx.fillRect(px+2,py+2,CELL-4,CELL-4);
+    if(index%3===0){ ctx.fillStyle='#f6f7f8'; ctx.fillRect(px+CELL*0.3,py+CELL*0.2,CELL*0.4,CELL*0.6); }
+  }
+
+  function drawCatHead(px,py,dir){
+    ctx.fillStyle = '#0b0b0b'; ctx.fillRect(px+1,py+1,CELL-2,CELL-2);
+    ctx.fillStyle = '#0b0b0b';
+    ctx.beginPath(); ctx.moveTo(px+CELL*0.25,py+CELL*0.25); ctx.lineTo(px+CELL*0.4,py+CELL*0.05); ctx.lineTo(px+CELL*0.45,py+CELL*0.35); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(px+CELL*0.75,py+CELL*0.25); ctx.lineTo(px+CELL*0.6,py+CELL*0.05); ctx.lineTo(px+CELL*0.55,py+CELL*0.35); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#f6f7f8'; ctx.fillRect(px+CELL*0.3, py+CELL*0.5, CELL*0.4, CELL*0.26);
+    ctx.fillStyle = '#2dd4bf';
+    ctx.fillRect(px+CELL*0.35, py+CELL*0.38, Math.max(2, CELL*0.08), Math.max(2, CELL*0.08));
+    ctx.fillRect(px+CELL*0.57, py+CELL*0.38, Math.max(2, CELL*0.08), Math.max(2, CELL*0.08));
+    ctx.fillStyle = '#ff9aa2'; ctx.fillRect(px+CELL*0.49, py+CELL*0.56, Math.max(2, CELL*0.06), Math.max(2, CELL*0.06));
+    ctx.strokeStyle = '#f6f7f8'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(px+CELL*0.28, py+CELL*0.6); ctx.lineTo(px+CELL*0.1, py+CELL*0.58);
+    ctx.moveTo(px+CELL*0.28, py+CELL*0.64); ctx.lineTo(px+CELL*0.08, py+CELL*0.66);
+    ctx.moveTo(px+CELL*0.72, py+CELL*0.6); ctx.lineTo(px+CELL*0.9, py+CELL*0.58);
+    ctx.moveTo(px+CELL*0.72, py+CELL*0.64); ctx.lineTo(px+CELL*0.92, py+CELL*0.66); ctx.stroke();
+  }
+
+  function draw(){ 
+    if (blackout) {
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
+    drawBoard(); drawApple(); drawCat(); 
+  }
+
+  let raf, lastTick=0;
+  function loop(ts=0){ if(!playing) return; if(!lastTick) lastTick = ts; if(ts - lastTick >= tickMs){ step(); lastTick = ts; } draw(); raf = requestAnimationFrame(loop); }
+  function step(){
+    if(pendingDir){ dir = pendingDir; pendingDir = null; }
+    const head = {x:cat[cat.length-1].x + dir.x, y:cat[cat.length-1].y + dir.y};
+    head.x = (head.x + SIZE) % SIZE; head.y = (head.y + SIZE) % SIZE;
+    if(cat.some(seg=>cellsEqual(seg,head))){ return gameOver('bwomp'); }
+    cat.push(head);
+    if(cellsEqual(head, apple)){
+      if(appleKind==='bad'){ applesEaten++; updateHud(); return triggerBadApple(); }
+      score += 10; applesEaten++; updateHud(); spawnApple(); tickMs = Math.max(75, SPEED_BASE - Math.floor(applesEaten * 1.5));
+    } else { cat.shift(); }
+  }
+  function gameOver(msg){ 
+    playing = false; cancelAnimationFrame(raf); 
+  }
+
+  // IF IT HAS A SCREEN ...
+  const badVideo = document.getElementById('badVideo');
+  const shatterFx = document.getElementById('shatterFx');
+
+  badVideo.src = 'bad-apple.mp4';
+  shatterFx.src = 'glass-shatter.mp3';
+
+  function triggerBadApple(){
+    if(badTriggered) return; 
+    const stage = document.getElementById('stage');
+    badTriggered = true;
+    playing = false;
+    cancelAnimationFrame(raf);
+
+    document.body.classList.add("dark");
+    blackout = true;
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    stage.style.width = (stage.offsetWidth + 450) + "px";
+
+    try {
+      shatterFx.playbackRate = 1.35;
+      shatterFx.currentTime = 0;
+      shatterFx.volume = 1.0;
+      shatterFx.play();
+    } catch(e) {}
+
+    const wrap = document.getElementById('videoWrap');
+    wrap.classList.add('show');
+    wrap.style.opacity = 0;
+    try { badVideo.currentTime = 0; badVideo.play(); } catch(e){}
+
+    setTimeout(()=>{
+      wrap.style.opacity = 1; 
+      blackout = false;
+    }, 5000);
+  }
+
+  function hideVideo(){ 
+    const wrap = document.getElementById('videoWrap');
+    wrap.classList.remove('show');
+    wrap.style.opacity='';
+    try{ badVideo.pause(); stage.style.width = ""; } catch(e){}
+    document.body.classList.remove('dark');
+    blackout = false;
+    draw();
+  }
+
+  reset();
+
+  const stage = document.getElementById('stage');
+  function resize(){
+      const rect = stage.getBoundingClientRect();
+      const cssSize = Math.min(rect.width, rect.height);
+      const dpr = window.devicePixelRatio || 1;
+      const desiredCell = Math.floor(cssSize / SIZE);
+      const trueCss = desiredCell * SIZE;
+      canvas.style.width = trueCss + 'px';
+      canvas.style.height = trueCss + 'px';
+      canvas.width = Math.floor(trueCss * dpr);
+      canvas.height = Math.floor(trueCss * dpr);
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      CELL = desiredCell;
+      draw();
+  } new ResizeObserver(resize).observe(stage);
+  </script>
+</body>
+</html>
