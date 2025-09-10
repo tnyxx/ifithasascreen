@@ -60,6 +60,7 @@
       justify-content:space-between; 
       padding:8px; 
       align-items:flex-start;
+      opacity:0%;
     }
 
     .pill{
@@ -250,7 +251,7 @@
 
   function spawnApple() {
     let kind = 'good';
-    if(applesEaten >= 10){ kind = Math.random() < 0.4 ? 'bad' : 'good'; } //APFELS
+    if(applesEaten >= 10){ kind = Math.random() < 0.32 ? 'bad' : 'good'; } //APFELS
     let pos; do{ pos = {x:rnd(0,SIZE-1), y:rnd(0,SIZE-1)}; } while(cellInCat(pos));
     apple = pos; appleKind = kind;
   }
