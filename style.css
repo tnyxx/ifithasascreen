@@ -366,3 +366,23 @@ button {
   -webkit-appearance: none;
   appearance: none;
 }
+
+.desktop-viewport-max {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: none !important;
+  max-height: none !important;
+  z-index: 9999 !important;
+  border-radius: 0 !important;
+  background: black !important;
+}
+
+.desktop-viewport-max video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  transform: scale(1.8) !important;
+}
