@@ -201,7 +201,10 @@ function triggerBadApple(){
       }
     }
   } else {
-    stage.style.width = (stage.offsetWidth + 450) + "px";
+    stage.classList.add('desktop-viewport-max');
+    wrap.classList.add('desktop-viewport-max');
+
+    document.body.style.overflow = 'hidden';
   }
 
   try {
@@ -252,7 +255,12 @@ function hideVideo(){
         screen.orientation.unlock();
       }
     } else {
-      stage.style.width = ""; 
+      stage.classList.remove('desktop-viewport-max');
+      wrap.classList.remove('desktop-viewport-max');
+      stage.style.width = "";
+    
+    // Restore scrolling
+    document.body.style.overflow = ''; 
     }
   } catch(e){}
   
